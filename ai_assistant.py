@@ -1,21 +1,16 @@
-import openai
-from langchain import LLMChain, OpenAI, PromptTemplate
+from openai import OpenAI
 import requests
 from datetime import datetime, timedelta
 import os 
-from newsapi import NewsApiClient
-
 
 class AI_Assistant:
-    def __init__(self, api_key):
-        openai.api_key = api_key
+    def __init__(self):
         self.companies = []
         self.news_subscriptions = {}
         self.sentiment_views = {}
         self.client = OpenAI(
                         base_url="https://models.inference.ai.azure.com",
-                        api_key=os.environ["GITHUB_TOKEN"],
-                        model = "gpt-4o"
+                        api_key=os.environ["GITHUB_TOKEN"]
                     )
 
     def add_company(self, company_name):
@@ -31,28 +26,39 @@ class AI_Assistant:
 
     def fetch_latest_news(self, company_name):
         api_key = os.environ.get("NEWS_API_KEY")
-       
-        newsapi = NewsApiClient(api_key=api_key)
-
-        # /v2/top-headlines
-        top_headlines = newsapi.get_top_headlines(q=company_name,
-                                                language='en',
-                                                country='in')
-        print(top_headlines)
-        return top_headlines
-
+        if not api_key:
+            raise ValueError("NEWS_API_KEY environment variable not set")
+        
+        url = f"https://newsapi.org/v2/everything?q={company_name}&apiKey={api_key}"
+        response = requests.get(url)
+        
+        if response.status_code == 200:
+            articles = response.json().get("articles", [])
+            return [article["title"] for article in articles]
+        else:
+            return []
 
     def create_sentiment_view(self, company_name):
         if company_name in self.companies:
             news = self.news_subscriptions[company_name]
-            if news:
-                prompt = PromptTemplate(
-                    input_variables=["news"],
-                    template="Analyze the sentiment of the following news articles: {news}"
+            if news:               
+                response = self.client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a sentiment analysis model and helping Wealth Advisors to analyze the sentiment of the news articles.",
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Analyze the sentiment of the following news articles: {news}"
+                    }
+                ],
+                model="gpt-4o",
+                temperature=1,
+                max_tokens=4096,
+                top_p=1
                 )
-                
-                chain = LLMChain(llm=self.client, prompt=prompt)
-                sentiment = chain.run(news=news)
+                sentiment = response.choices[0].message.content
                 self.sentiment_views[company_name] = sentiment
                 return sentiment
         return None
