@@ -3,3 +3,5 @@ langchain
 langchain_community
 newsapi-python
 gradio
+sentence_transformers
+pinecone
